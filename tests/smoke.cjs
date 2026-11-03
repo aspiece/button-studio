@@ -1,0 +1,28 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const path=require('node:path');
+const root=path.join(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const html=read('index.html');
+const catalog=JSON.parse(read('approved-art/catalog.json'));
+assert.equal(catalog.images.length,42,'Approved 42 brand-neutral public graphics');
+assert.ok(catalog.images.every(a=>a.approved&&a.path.startsWith('approved-art/images/')&&!/fenton/i.test(a.name+' '+a.id+' '+a.path)),'Only generic public images');
+for(const art of catalog.images)assert.ok(fs.existsSync(path.join(root,art.path)),'Missing artwork '+art.path);
+assert.match(html,/ButtonStudioEdition='general'/,'General edition active');
+assert.match(html,/id="propertiesPanel"/,'Properties panel');
+assert.match(html,/data-edit-tab="logos"/,'Public artwork tab');
+assert.doesNotMatch(html,/id="(?:teamLogo|firstLogo)"/,'No team/FIRST selectors');
+assert.doesNotMatch(html,/href="\.\.\//,'No parent-project dependencies');
+assert.doesNotMatch(html,/src="\.\.\//,'No parent-project scripts');
+assert.doesNotMatch(html,/logo-analytics/,'No Fenton analytics');
+assert.equal((html.match(/<option value="(?:blank|lightMinimal|darkMinimal|blue|teal|purple|coral|sunset|mint|gold|split|stripes|hex|burst)"/g)||[]).length,14);
+const inline=html.match(/<script>\s*'use strict';([\s\S]*?)<\/script>/);assert.ok(inline);
+new vm.Script(inline[1]);
+for(const script of ['phase1.js','phase2.js','phase3.js','properties.js','pwa.js','service-worker.js'])new vm.Script(read(script),{filename:script});
+const refs=[...html.matchAll(/(?:href|src)="([^"]+)"/g)].map(m=>m[1]).filter(v=>!v.startsWith('https:')&&!v.startsWith('data:')&&!v.startsWith('#'));
+for(const ref of refs){const file=ref.split('?')[0].replace(/^\.\//,'');if(!file||file==='/')continue;assert.ok(fs.existsSync(path.join(root,file)),'Missing asset '+file)}
+const manifest=JSON.parse(read('manifest.json'));assert.equal(manifest.start_url,'./');
+for(const icon of manifest.icons)assert.ok(fs.existsSync(path.join(root,icon.src)),'Missing icon '+icon.src);
+assert.ok(!fs.existsSync(path.join(root,'logos')),'No team/school/FIRST logos');
+console.log('PASS: standalone General Button Studio, 14 templates, 42 public images, all local assets');
